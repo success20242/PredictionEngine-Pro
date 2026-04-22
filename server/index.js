@@ -1,5 +1,5 @@
-const PORT = process.env.PORT || 5000;
+const cors = require("cors");
 
-app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
-});
+app.use(cors({
+  origin: "http://localhost:5173"
+}));
