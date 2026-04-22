@@ -204,6 +204,20 @@ function predictMatch(match) {
 /**
  * -------------------------------
  * 10. BATCH PREDICTIONS
+ const { storePrediction } = require("./learningEngine");
+
+function predictMatch(match) {
+  ...
+  const output = {
+    ...match,
+    prediction: normalized,
+    confidence: confidenceScore(normalized)
+  };
+
+  storePrediction(match, normalized);
+
+  return output;
+}
  * -------------------------------
  */
 function runPredictions(matches) {
