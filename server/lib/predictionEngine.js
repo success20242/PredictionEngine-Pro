@@ -1,13 +1,9 @@
-/**
- * ===============================
- * ADVANCED PREDICTION ENGINE
- * ===============================
- */
+const { storePrediction } = require("./learningEngine");
 
 /**
- * -------------------------------
- * 1. POISSON MODEL
- * -------------------------------
+ * ===============================
+ * POISSON MODEL
+ * ===============================
  */
 function poisson(lambda, k) {
   return (Math.pow(lambda, k) * Math.exp(-lambda)) / factorial(k);
@@ -26,9 +22,9 @@ function poissonModel(homeXG, awayXG) {
 }
 
 /**
- * -------------------------------
- * 2. ELO MODEL
- * -------------------------------
+ * ===============================
+ * ELO MODEL
+ * ===============================
  */
 function expectedScore(rA, rB) {
   return 1 / (1 + Math.pow(10, (rB - rA) / 400));
@@ -46,9 +42,9 @@ function eloModel(homeRating, awayRating) {
 }
 
 /**
- * -------------------------------
- * 3. FORM MODEL
- * -------------------------------
+ * ===============================
+ * FORM MODEL
+ * ===============================
  */
 function formScore(results = []) {
   if (!results.length) return 0.5;
@@ -63,20 +59,17 @@ function formScore(results = []) {
 }
 
 function formModel(homeForm, awayForm) {
-  const h = formScore(homeForm);
-  const a = formScore(awayForm);
-
   return {
-    homeWin: h,
+    homeWin: formScore(homeForm),
     draw: 0.2,
-    awayWin: a
+    awayWin: formScore(awayForm)
   };
 }
 
 /**
- * -------------------------------
- * 4. xG PROXY MODEL
- * -------------------------------
+ * ===============================
+ * xG MODEL
+ * ===============================
  */
 function xgProxy(goals, shots) {
   if (!shots || shots === 0) return 1.2;
@@ -95,9 +88,9 @@ function xgModel(homeStats, awayStats) {
 }
 
 /**
- * -------------------------------
- * 5. ENSEMBLE ENGINE (WEIGHTED)
- * -------------------------------
+ * ===============================
+ * ENSEMBLE
+ * ===============================
  */
 function ensemble(models, weights) {
   let result = { home: 0, draw: 0, away: 0 };
@@ -112,24 +105,24 @@ function ensemble(models, weights) {
 }
 
 /**
- * -------------------------------
- * 6. NORMALIZE PROBABILITIES
- * -------------------------------
+ * ===============================
+ * NORMALIZE
+ * ===============================
  */
-function normalize(probs) {
-  const total = probs.home + probs.draw + probs.away;
+function normalize(p) {
+  const total = p.home + p.draw + p.away;
 
   return {
-    home: probs.home / total,
-    draw: probs.draw / total,
-    away: probs.away / total
+    home: p.home / total,
+    draw: p.draw / total,
+    away: p.away / total
   };
 }
 
 /**
- * -------------------------------
- * 7. VALUE BET DETECTION
- * -------------------------------
+ * ===============================
+ * VALUE BET LOGIC
+ * ===============================
  */
 function detectValue(prob, odds) {
   if (!odds) return "NO_DATA";
@@ -142,12 +135,12 @@ function detectValue(prob, odds) {
 }
 
 /**
- * -------------------------------
- * 8. CONFIDENCE SCORE
- * -------------------------------
+ * ===============================
+ * CONFIDENCE
+ * ===============================
  */
-function confidenceScore(probs) {
-  const max = Math.max(probs.home, probs.draw, probs.away);
+function confidenceScore(p) {
+  const max = Math.max(p.home, p.draw, p.away);
 
   if (max > 0.65) return "HIGH";
   if (max > 0.5) return "MEDIUM";
@@ -155,12 +148,11 @@ function confidenceScore(probs) {
 }
 
 /**
- * -------------------------------
- * 9. MAIN PREDICTION FUNCTION
- * -------------------------------
+ * ===============================
+ * MAIN PREDICTION
+ * ===============================
  */
 function predictMatch(match) {
-  // Dummy fallback data (until you enrich ingestion)
   const homeRating = match.homeRating || 1500;
   const awayRating = match.awayRating || 1500;
 
@@ -170,26 +162,23 @@ function predictMatch(match) {
   const homeStats = match.homeStats || { goals: 5, shots: 20 };
   const awayStats = match.awayStats || { goals: 4, shots: 18 };
 
-  // MODELS
   const m1 = poissonModel(1.5, 1.2);
   const m2 = eloModel(homeRating, awayRating);
   const m3 = formModel(homeForm, awayForm);
   const m4 = xgModel(homeStats, awayStats);
 
-  // WEIGHTS (can be learned later)
   const weights = [0.3, 0.25, 0.2, 0.25];
 
   const combined = ensemble([m1, m2, m3, m4], weights);
   const normalized = normalize(combined);
 
-  // Value detection (example odds)
   const odds = match.odds || {
     home: 2.0,
     draw: 3.2,
     away: 3.5
   };
 
-  return {
+  const output = {
     ...match,
     prediction: normalized,
     confidence: confidenceScore(normalized),
@@ -199,26 +188,17 @@ function predictMatch(match) {
       away: detectValue(normalized.away, odds.away)
     }
   };
-}
 
-/**
- * -------------------------------
- * 10. BATCH PREDICTIONS
- const { storePrediction } = require("./learningEngine");
-
-function predictMatch(match) {
-  ...
-  const output = {
-    ...match,
-    prediction: normalized,
-    confidence: confidenceScore(normalized)
-  };
-
+  // ✅ LEARNING INTEGRATION (FIXED)
   storePrediction(match, normalized);
 
   return output;
 }
- * -------------------------------
+
+/**
+ * ===============================
+ * BATCH
+ * ===============================
  */
 function runPredictions(matches) {
   return matches.map(predictMatch);
