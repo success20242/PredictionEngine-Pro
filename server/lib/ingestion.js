@@ -2,7 +2,7 @@ const axios = require("axios");
 
 /**
  * ===============================
- * 1. CALL GEMINI (SAFE)
+ * 1. CALL GEMINI (FIXED + STABLE)
  * ===============================
  */
 async function callGemini(prompt) {
@@ -10,12 +10,19 @@ async function callGemini(prompt) {
     const res = await axios.post(
       "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent",
       {
-        contents: [{ parts: [{ text: prompt }] }],
-        tools: [{ google_search: {} }]
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }]
+          }
+        ]
       },
       {
         params: { key: process.env.GEMINI_KEY },
-        timeout: 15000
+        timeout: 20000,
+        headers: {
+          "Content-Type": "application/json"
+        }
       }
     );
 
@@ -23,7 +30,10 @@ async function callGemini(prompt) {
       res?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
     );
   } catch (error) {
-    console.error("Gemini API error:", error.message);
+    console.error(
+      "Gemini API error:",
+      error?.response?.data || error.message
+    );
     return "";
   }
 }
@@ -37,10 +47,10 @@ function extractJSONSafe(text) {
   try {
     if (!text || typeof text !== "string") return [];
 
-    // remove markdown blocks
+    // remove markdown if Gemini adds it
     text = text.replace(/```json|```/g, "").trim();
 
-    // try direct parse first
+    // try direct parse
     try {
       return JSON.parse(text);
     } catch {}
@@ -50,9 +60,7 @@ function extractJSONSafe(text) {
 
     if (start === -1 || end === -1) return [];
 
-    const sliced = text.slice(start, end + 1);
-
-    return JSON.parse(sliced);
+    return JSON.parse(text.slice(start, end + 1));
 
   } catch (e) {
     console.warn("JSON parse failed:", e.message);
@@ -91,7 +99,7 @@ function validateMatch(match) {
 
 /**
  * ===============================
- * 5. CONSENSUS ENGINE (FIXED)
+ * 5. CONSENSUS ENGINE
  * ===============================
  */
 function consensusMatches(datasets) {
@@ -104,7 +112,7 @@ function consensusMatches(datasets) {
       const match = normalizeMatch(raw);
       if (!validateMatch(match)) return;
 
-      const key = `${match.homeTeam}_${match.awayTeam}`;
+      const key = `${match.homeTeam}_${match.awayTeam}`.toLowerCase();
 
       if (!map[key]) {
         map[key] = { count: 0, data: match };
@@ -119,7 +127,7 @@ function consensusMatches(datasets) {
 
 /**
  * ===============================
- * 6. CONFIDENCE SCORING
+ * 6. CONFIDENCE SCORE
  * ===============================
  */
 function scoreConfidence(match, count) {
@@ -135,7 +143,7 @@ function scoreConfidence(match, count) {
 
 /**
  * ===============================
- * 7. CLEAN + FILTER PIPELINE
+ * 7. CLEAN PIPELINE
  * ===============================
  */
 function cleanMatches(consensusData) {
@@ -161,7 +169,7 @@ function cleanMatches(consensusData) {
       };
     })
     .filter(Boolean)
-    .filter(m => m.confidence >= 0.35); // FIXED THRESHOLD
+    .filter(m => m.confidence >= 0.35);
 }
 
 /**
@@ -171,9 +179,12 @@ function cleanMatches(consensusData) {
  */
 async function fetchReliableMatches() {
   const prompts = [
-    `Return ONLY valid JSON array.
-     Format: [{ "homeTeam": "", "awayTeam": "", "league": "", "date": "" }]
-     No explanation.`,
+    `Return ONLY a JSON array.
+Format:
+[
+  { "homeTeam": "", "awayTeam": "", "league": "", "date": "" }
+]
+No explanation.`,
 
     `List today's football fixtures ONLY as JSON array.`,
 
@@ -193,20 +204,20 @@ async function fetchReliableMatches() {
 
     const cleaned = cleanMatches(consensusData);
 
-    // DEBUG (important during development)
-    console.log("RAW DATASETS:", JSON.stringify(datasets, null, 2));
+    // DEBUG (keep during development)
+    console.log("RAW:", datasets);
     console.log("CONSENSUS:", consensusData);
     console.log("CLEANED:", cleaned);
 
     if (cleaned.length > 0) {
-      console.log("✅ Reliable matches fetched:", cleaned.length);
+      console.log("✅ Matches loaded:", cleaned.length);
       return cleaned;
     }
 
-    console.warn("⚠️ Low-quality data, retrying...");
+    console.warn("⚠️ Retry needed...");
   }
 
-  console.error("❌ Failed to fetch reliable matches");
+  console.error("❌ No reliable matches found");
   return [];
 }
 
