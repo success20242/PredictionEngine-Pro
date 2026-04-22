@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Dependencies
+node_modules
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output (React/Vite)
+dist
+build
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode
+.idea
+
+# Optional: local history/data
+server/data/history.json
