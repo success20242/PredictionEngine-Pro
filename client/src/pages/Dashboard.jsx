@@ -1,29 +1,48 @@
+import { useEffect, useState } from "react";
+import { getPredictions } from "../api";
+import MatchCard from "../components/MatchCard";
+
 export default function Dashboard() {
+  const [matches, setMatches] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  async function loadData() {
+    try {
+      const res = await getPredictions();
+      setMatches(res.data);
+    } catch (err) {
+      console.error("API error:", err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+
+    // 🔥 LIVE AUTO REFRESH (30 seconds)
+    const interval = setInterval(() => {
+      loadData();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
-      
-      <h1 className="text-3xl font-bold mb-6">
-        ⚽ Prediction Dashboard
+
+      <h1 className="text-3xl font-bold mb-4">
+        ⚽ Live Predictions
       </h1>
 
-      <div className="grid grid-cols-3 gap-4">
-        
-        <div className="bg-slate-900 p-4 rounded-xl">
-          <h2>Accuracy</h2>
-          <p className="text-green-400 text-xl">72%</p>
-        </div>
+      {loading && <p>Loading live matches...</p>}
 
-        <div className="bg-slate-900 p-4 rounded-xl">
-          <h2>ROI</h2>
-          <p className="text-blue-400 text-xl">+18%</p>
-        </div>
-
-        <div className="bg-slate-900 p-4 rounded-xl">
-          <h2>Active Matches</h2>
-          <p className="text-yellow-400 text-xl">24</p>
-        </div>
-
+      <div className="grid gap-3">
+        {matches.map((match, i) => (
+          <MatchCard key={i} match={match} />
+        ))}
       </div>
+
     </div>
   );
 }
