@@ -19,11 +19,12 @@ async function callGemini(prompt) {
       }
     );
 
-    return res?.data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
-
+    return (
+      res?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
+    );
   } catch (error) {
     console.error("Gemini API error:", error.message);
-    return "[]";
+    return "";
   }
 }
 
@@ -34,12 +35,24 @@ async function callGemini(prompt) {
  */
 function extractJSONSafe(text) {
   try {
+    if (!text || typeof text !== "string") return [];
+
+    // remove markdown blocks
+    text = text.replace(/```json|```/g, "").trim();
+
+    // try direct parse first
+    try {
+      return JSON.parse(text);
+    } catch {}
+
     const start = text.indexOf("[");
     const end = text.lastIndexOf("]");
 
     if (start === -1 || end === -1) return [];
 
-    return JSON.parse(text.slice(start, end + 1));
+    const sliced = text.slice(start, end + 1);
+
+    return JSON.parse(sliced);
 
   } catch (e) {
     console.warn("JSON parse failed:", e.message);
@@ -49,27 +62,12 @@ function extractJSONSafe(text) {
 
 /**
  * ===============================
- * 3. VALIDATION
- * ===============================
- */
-function validateMatch(match) {
-  if (!match) return false;
-
-  if (!match.homeTeam || !match.awayTeam) return false;
-
-  if (match.homeTeam === match.awayTeam) return false;
-
-  if (match.homeTeam.length < 2 || match.awayTeam.length < 2) return false;
-
-  return true;
-}
-
-/**
- * ===============================
- * 4. NORMALIZE MATCH (CRITICAL)
+ * 3. NORMALIZE MATCH
  * ===============================
  */
 function normalizeMatch(match) {
+  if (!match) return null;
+
   return {
     homeTeam: match.homeTeam?.trim(),
     awayTeam: match.awayTeam?.trim(),
@@ -80,23 +78,41 @@ function normalizeMatch(match) {
 
 /**
  * ===============================
- * 5. CONSENSUS ENGINE
+ * 4. VALIDATION
+ * ===============================
+ */
+function validateMatch(match) {
+  if (!match) return false;
+  if (!match.homeTeam || !match.awayTeam) return false;
+  if (match.homeTeam === match.awayTeam) return false;
+  if (match.homeTeam.length < 2 || match.awayTeam.length < 2) return false;
+  return true;
+}
+
+/**
+ * ===============================
+ * 5. CONSENSUS ENGINE (FIXED)
  * ===============================
  */
 function consensusMatches(datasets) {
   const map = {};
 
-  datasets.flat().forEach(raw => {
-    const match = normalizeMatch(raw);
+  datasets
+    .filter(Array.isArray)
+    .flat()
+    .forEach(raw => {
+      const match = normalizeMatch(raw);
+      if (!validateMatch(match)) return;
 
-    const key = `${match.homeTeam}_${match.awayTeam}`;
+      const key = `${match.homeTeam}_${match.awayTeam}`;
 
-    if (!map[key]) {
-      map[key] = { count: 0, data: match };
-    }
+      if (!map[key]) {
+        map[key] = { count: 0, data: match };
+      }
 
-    map[key].count++;
-  });
+      map[key].count++;
+      map[key].data = match;
+    });
 
   return Object.values(map);
 }
@@ -137,25 +153,31 @@ function cleanMatches(consensusData) {
         confidence,
         sources: count,
         reliability:
-          confidence > 0.75 ? "HIGH" :
-          confidence > 0.5 ? "MEDIUM" :
-          "LOW"
+          confidence > 0.75
+            ? "HIGH"
+            : confidence > 0.5
+            ? "MEDIUM"
+            : "LOW"
       };
     })
-    .filter(Boolean) // remove nulls
-    .filter(m => m.confidence >= 0.5); // 🔥 threshold
+    .filter(Boolean)
+    .filter(m => m.confidence >= 0.35); // FIXED THRESHOLD
 }
 
 /**
  * ===============================
- * 8. FETCH WITH RETRY
+ * 8. FETCH RELIABLE MATCHES
  * ===============================
  */
 async function fetchReliableMatches() {
   const prompts = [
-    "Return ONLY valid JSON. List today's football fixtures with homeTeam, awayTeam, league, date.",
-    "Get today's football matches. JSON only. No explanation.",
-    "Cross-check ESPN and BBC Sport. Return fixtures in JSON format."
+    `Return ONLY valid JSON array.
+     Format: [{ "homeTeam": "", "awayTeam": "", "league": "", "date": "" }]
+     No explanation.`,
+
+    `List today's football fixtures ONLY as JSON array.`,
+
+    `Return football matches in strict JSON format only.`
   ];
 
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -171,7 +193,12 @@ async function fetchReliableMatches() {
 
     const cleaned = cleanMatches(consensusData);
 
-    if (cleaned.length > 3) {
+    // DEBUG (important during development)
+    console.log("RAW DATASETS:", JSON.stringify(datasets, null, 2));
+    console.log("CONSENSUS:", consensusData);
+    console.log("CLEANED:", cleaned);
+
+    if (cleaned.length > 0) {
       console.log("✅ Reliable matches fetched:", cleaned.length);
       return cleaned;
     }
