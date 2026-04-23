@@ -8,7 +8,7 @@ const axios = require("axios");
 async function callGemini(prompt) {
   try {
     const res = await axios.post(
-      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
       {
         contents: [
           {
@@ -18,11 +18,11 @@ async function callGemini(prompt) {
         ]
       },
       {
-        params: { key: process.env.GEMINI_KEY },
-        timeout: 20000,
         headers: {
-          "Content-Type": "application/json"
-        }
+          "Content-Type": "application/json",
+          "X-goog-api-key": process.env.GEMINI_KEY
+        },
+        timeout: 20000
       }
     );
 
