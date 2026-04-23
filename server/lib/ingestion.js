@@ -26,9 +26,10 @@ async function callGemini(prompt) {
       }
     );
 
-    return (
-      res?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
-    );
+    const text =
+      res?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    return text || "";
   } catch (error) {
     console.error(
       "Gemini API error:",
@@ -37,6 +38,7 @@ async function callGemini(prompt) {
     return "";
   }
 }
+
 /**
  * ===============================
  * 2. SAFE JSON EXTRACTION
@@ -46,10 +48,9 @@ function extractJSONSafe(text) {
   try {
     if (!text || typeof text !== "string") return [];
 
-    // remove markdown if Gemini adds it
     text = text.replace(/```json|```/g, "").trim();
 
-    // try direct parse
+    // direct parse attempt
     try {
       return JSON.parse(text);
     } catch {}
@@ -60,7 +61,6 @@ function extractJSONSafe(text) {
     if (start === -1 || end === -1) return [];
 
     return JSON.parse(text.slice(start, end + 1));
-
   } catch (e) {
     console.warn("JSON parse failed:", e.message);
     return [];
@@ -203,7 +203,7 @@ No explanation.`,
 
     const cleaned = cleanMatches(consensusData);
 
-    // DEBUG (keep during development)
+    // DEBUG LOGS
     console.log("RAW:", datasets);
     console.log("CONSENSUS:", consensusData);
     console.log("CLEANED:", cleaned);
