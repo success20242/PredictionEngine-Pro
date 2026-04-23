@@ -89,7 +89,7 @@ function xgModel(homeStats, awayStats) {
 
 /**
  * ===============================
- * ENSEMBLE
+ * ENSEMBLE ENGINE
  * ===============================
  */
 function ensemble(models, weights) {
@@ -121,7 +121,7 @@ function normalize(p) {
 
 /**
  * ===============================
- * VALUE BET LOGIC
+ * VALUE BET DETECTION
  * ===============================
  */
 function detectValue(prob, odds) {
@@ -136,7 +136,7 @@ function detectValue(prob, odds) {
 
 /**
  * ===============================
- * CONFIDENCE
+ * CONFIDENCE SCORE
  * ===============================
  */
 function confidenceScore(p) {
@@ -149,7 +149,7 @@ function confidenceScore(p) {
 
 /**
  * ===============================
- * MAIN PREDICTION
+ * MAIN PREDICTION FUNCTION (FIXED)
  * ===============================
  */
 function predictMatch(match) {
@@ -162,12 +162,32 @@ function predictMatch(match) {
   const homeStats = match.homeStats || { goals: 5, shots: 20 };
   const awayStats = match.awayStats || { goals: 4, shots: 18 };
 
-  const m1 = poissonModel(1.5, 1.2);
+  // ✅ FIXED: dynamic Poisson
+  const m1 = poissonModel(
+    homeStats.goals ? homeStats.goals / 3 : 1.3,
+    awayStats.goals ? awayStats.goals / 3 : 1.1
+  );
+
+  // ✅ Elo
   const m2 = eloModel(homeRating, awayRating);
+
+  // ✅ Form
   const m3 = formModel(homeForm, awayForm);
+
+  // ✅ xG
   const m4 = xgModel(homeStats, awayStats);
 
-  const weights = [0.3, 0.25, 0.2, 0.25];
+  /**
+   * 🔥 FIXED WEIGHTS (dynamic strength difference)
+   */
+  const ratingDiff = (homeRating - awayRating) / 5000;
+
+  const weights = [
+    0.35 + ratingDiff,
+    0.25,
+    0.2,
+    0.2
+  ];
 
   const combined = ensemble([m1, m2, m3, m4], weights);
   const normalized = normalize(combined);
@@ -189,15 +209,21 @@ function predictMatch(match) {
     }
   };
 
-  // ✅ LEARNING INTEGRATION (FIXED)
-  storePrediction(match, normalized);
+  // ✅ SAFE learning hook
+  try {
+    if (typeof storePrediction === "function") {
+      storePrediction(match, normalized);
+    }
+  } catch (e) {
+    console.warn("Learning engine error:", e.message);
+  }
 
   return output;
 }
 
 /**
  * ===============================
- * BATCH
+ * BATCH PROCESSING
  * ===============================
  */
 function runPredictions(matches) {
