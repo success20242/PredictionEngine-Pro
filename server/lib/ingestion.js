@@ -8,7 +8,7 @@ const axios = require("axios");
 async function callGemini(prompt) {
   try {
     const res = await axios.post(
-      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent",
+      "https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent",
       {
         contents: [
           {
@@ -37,7 +37,6 @@ async function callGemini(prompt) {
     return "";
   }
 }
-
 /**
  * ===============================
  * 2. SAFE JSON EXTRACTION
