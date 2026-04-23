@@ -26,10 +26,9 @@ async function callGemini(prompt) {
       }
     );
 
-    const text =
-      res?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-
-    return text || "";
+    return (
+      res?.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ""
+    );
   } catch (error) {
     console.error(
       "Gemini API error:",
@@ -48,6 +47,7 @@ function extractJSONSafe(text) {
   try {
     if (!text || typeof text !== "string") return [];
 
+    // clean markdown wrappers
     text = text.replace(/```json|```/g, "").trim();
 
     // direct parse attempt
@@ -55,6 +55,7 @@ function extractJSONSafe(text) {
       return JSON.parse(text);
     } catch {}
 
+    // fallback extraction
     const start = text.indexOf("[");
     const end = text.lastIndexOf("]");
 
@@ -157,7 +158,7 @@ function cleanMatches(consensusData) {
 
       return {
         ...match,
-        confidence,
+        confidence: Number(confidence.toFixed(2)),
         sources: count,
         reliability:
           confidence > 0.75
@@ -168,7 +169,7 @@ function cleanMatches(consensusData) {
       };
     })
     .filter(Boolean)
-    .filter(m => m.confidence >= 0.35);
+    .filter(m => m.confidence >= 0.5);
 }
 
 /**
@@ -177,25 +178,25 @@ function cleanMatches(consensusData) {
  * ===============================
  */
 async function fetchReliableMatches() {
+  const today = new Date().toISOString().split("T")[0];
+
   const prompts = [
-    `Return ONLY a JSON array.
+    `Return ONLY a JSON array of football matches for TODAY (${today}).
 Format:
 [
-  { "homeTeam": "", "awayTeam": "", "league": "", "date": "" }
+  { "homeTeam": "", "awayTeam": "", "league": "", "date": "${today}" }
 ]
 No explanation.`,
 
-    `List today's football fixtures ONLY as JSON array.`,
+    `List today's football fixtures ONLY as JSON array for ${today}.`,
 
-    `Return football matches in strict JSON format only.`
+    `Return football matches in strict JSON format only for ${today}.`
   ];
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     console.log(`Fetching matches (attempt ${attempt})...`);
 
-    const responses = await Promise.all(
-      prompts.map(p => callGemini(p))
-    );
+    const responses = await Promise.all(prompts.map(p => callGemini(p)));
 
     const datasets = responses.map(extractJSONSafe);
 
@@ -204,7 +205,7 @@ No explanation.`,
     const cleaned = cleanMatches(consensusData);
 
     // DEBUG LOGS
-    console.log("RAW:", datasets);
+    console.log("RAW:", JSON.stringify(datasets, null, 2));
     console.log("CONSENSUS:", consensusData);
     console.log("CLEANED:", cleaned);
 
