@@ -47,15 +47,12 @@ function extractJSONSafe(text) {
   try {
     if (!text || typeof text !== "string") return [];
 
-    // clean markdown wrappers
     text = text.replace(/```json|```/g, "").trim();
 
-    // direct parse attempt
     try {
       return JSON.parse(text);
     } catch {}
 
-    // fallback extraction
     const start = text.indexOf("[");
     const end = text.lastIndexOf("]");
 
@@ -143,7 +140,7 @@ function scoreConfidence(match, count) {
 
 /**
  * ===============================
- * 7. CLEAN PIPELINE
+ * 7. CLEAN + RELIABILITY FIX (UPDATED)
  * ===============================
  */
 function cleanMatches(consensusData) {
@@ -156,16 +153,18 @@ function cleanMatches(consensusData) {
 
       const confidence = scoreConfidence(match, count);
 
+      const reliability =
+        confidence >= 0.75
+          ? "HIGH"
+          : confidence >= 0.5
+          ? "MEDIUM"
+          : "LOW";
+
       return {
         ...match,
         confidence: Number(confidence.toFixed(2)),
         sources: count,
-        reliability:
-          confidence > 0.75
-            ? "HIGH"
-            : confidence > 0.5
-            ? "MEDIUM"
-            : "LOW"
+        reliability
       };
     })
     .filter(Boolean)
@@ -174,24 +173,41 @@ function cleanMatches(consensusData) {
 
 /**
  * ===============================
- * 8. FETCH RELIABLE MATCHES
+ * 8. PROMPTS (FIXED DATE SYSTEM)
+ * ===============================
+ */
+function getPrompts() {
+  const today = new Date().toISOString().split("T")[0];
+
+  return [
+    `Return ONLY a JSON array of TODAY'S football fixtures.
+Current date: ${today}
+
+STRICT FORMAT:
+[
+  {
+    "homeTeam": "",
+    "awayTeam": "",
+    "league": "",
+    "date": "${today}"
+  }
+]
+
+NO past matches. NO future matches. NO explanation.`,
+
+    `List ONLY today's football matches as JSON array for date ${today}.`,
+
+    `Return current football fixtures for ${today} ONLY in strict JSON format.`
+  ];
+}
+
+/**
+ * ===============================
+ * 9. FETCH RELIABLE MATCHES
  * ===============================
  */
 async function fetchReliableMatches() {
-  const today = new Date().toISOString().split("T")[0];
-
-  const prompts = [
-    `Return ONLY a JSON array of football matches for TODAY (${today}).
-Format:
-[
-  { "homeTeam": "", "awayTeam": "", "league": "", "date": "${today}" }
-]
-No explanation.`,
-
-    `List today's football fixtures ONLY as JSON array for ${today}.`,
-
-    `Return football matches in strict JSON format only for ${today}.`
-  ];
+  const prompts = getPrompts();
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     console.log(`Fetching matches (attempt ${attempt})...`);
@@ -204,7 +220,6 @@ No explanation.`,
 
     const cleaned = cleanMatches(consensusData);
 
-    // DEBUG LOGS
     console.log("RAW:", JSON.stringify(datasets, null, 2));
     console.log("CONSENSUS:", consensusData);
     console.log("CLEANED:", cleaned);
